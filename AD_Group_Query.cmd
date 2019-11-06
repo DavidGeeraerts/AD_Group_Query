@@ -29,8 +29,8 @@
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 SET Name=AD Group Member Fetcher
-SET Version=1.8.0
-SET BUILD=2019-10-29-110718
+SET Version=2.0.0
+SET BUILD=2019-11-06-0724
 Title %Name% Version: %Version%
 Prompt DS$G
 color 8F
@@ -43,12 +43,20 @@ color 8F
 ::	uses user profile location for logs
 SET LogPath=%APPDATA%\Logs
 SET Log=AD_Group_Query.txt
+
+:: Advanced Settings
+:: 
+:: Network Location for dependency binary files
+SET "NET_BIN_REPO=\\evergreen.edu\netlogon\SciComp\Assets\bin"
+
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 ::	Runnnig Defaults that is not recommended to change in script, rather
 ::		change during commandlet run time, using menu system.
 SET DC=%LOGONSERVER:~2%
 SET cUSERNAME=%USERNAME%
-::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 ::##### Everything below here is 'hard-coded' [DO NOT MODIFY] #####
@@ -65,8 +73,10 @@ SET du=1
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 :: Dependency Checks
-IF NOT EXIST %SYSTEMROOT%\System32\DSQUERY.EXE GoTo errDep
-IF NOT EXIST %SYSTEMROOT%\System32\DSGET.EXE GoTo errDep
+SET PREREQUISITE_STATUS=1
+IF NOT EXIST %SYSTEMROOT%\System32\DSQUERY.EXE SET PREREQUISITE_STATUS=0
+IF NOT EXIST %SYSTEMROOT%\System32\DSGET.EXE SET PREREQUISITE_STATUS=0
+IF %PREREQUISITE_STATUS% EQU 0 GoTo errDep
 
 :: Is domain user or local user?
 whoami /UPN || FOR /F "tokens=1-2 delims=\" %%a IN ('whoami') Do SET domain=%%a && SET du=0 && GoTo err0du
@@ -88,7 +98,7 @@ GoTo Menu
 ::
 :Menu
 Color 7
-mode con:cols=60 lines=40
+mode con:cols=55 lines=40
 Cls
 Echo ******************************************************
 Echo Location: Main Menu             
@@ -164,6 +174,9 @@ If ERRORLevel 1 GoTo UsetLg
 Echo.
 ::
 :uSetDC
+IF NOT DEFINED cUSERNAME GoTo uSetDU
+IF NOT DEFINED PASSWORD GoTo uSetDU
+IF NOT DEFINED Domain GoTo uSetDU
 Color 7
 mode con:cols=55 lines=40
 cls
@@ -173,19 +186,20 @@ Echo.
 Echo.
 Echo  Domain Controller: %DC%
 Echo ******************************************************
-::
 Echo.
 Echo.
 Echo List of available Domain Controllers:
 Echo.
-dsquery server -o rdn
+dsquery server -o rdn -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD%
 IF %ERRORLEVEL% NEQ 0 GoTo uSetDU
 Echo.
 Echo.
-SET /P DC=Domain Controller=
+SET /P DC=Domain Controller:
 Echo.
 ::?Maybe change this to a PING check?
-dsquery group domainroot -name "Domain Users" -s %DC% && Echo. && Echo Success! || SET DC=%LOGONSERVER:~2% && Echo. && Echo. && Echo DC appears to be off-line! Select another DC from settings Menu.
+@ping %DC% || (SET DC=%LOGONSERVER:~2%) && GoTo uSetDC
+Echo.
+Echo Success!
 Echo. 
 Timeout/t 30
 GoTo uSet
@@ -242,13 +256,13 @@ Echo.
 Echo If no change is desired,
 Echo just hit enter and leave blank.
 Echo.
-SET /p LogPath=Log Path=
+SET /p LogPath=Log Path:
 Echo.
-SET /p Log=Log Name=AD_Group_Query.txt
+SET /p Log=Log Name:AD_Group_Query.txt
 Echo.
 :Sub1
 Echo Yes or No
-SET /P kpLog=Keep Log=
+SET /P kpLog=Keep Log:
 IF %kpLog%==yes SET kpLog=Yes
 IF %kpLog%==YES SET kpLog=Yes
 IF %kpLog%==no SET kpLog=No
@@ -291,15 +305,15 @@ Echo leave blank to not change settings;
 Echo note that the connection test to the DC will fail since PW will be blank.
 Echo.
 :sublim
-SET /p sLimit=Query limit=
+SET /p sLimit=Query limit:
 Echo %sLimit% | findstr /R [a-z]
 IF %ERRORLEVEL% EQU 0 SET sLimit=100 & GoTo errlim
 Echo.
-SET /p cUSERNAME=User name=
+SET /p cUSERNAME=User name:
 Echo.
-SET /P Password=User password=
+SET /P Password=User password:
 Echo.
-SET /P Domain=Domain=
+SET /P Domain=Domain:
 SET strDomain=%Domain%
 Echo %Domain% | findStr /l "."
 IF %ERRORLEVEL% NEQ 0 FOR /F "tokens=1-2 delims=^@" %%a IN ('whoami /UPN') Do SET domain=%%b & GoTo errVdn
@@ -308,7 +322,7 @@ Echo.
 dsquery server -o rdn -d %domain% -u %cUSERNAME% -p %PASSWORD% || Goto errSdu
 Echo.
 :Uset0DC
-SET /P DC=Domain Controller=
+SET /P DC=Domain Controller:
 Echo.
 @PING %DC%
 IF %ERRORLEVEL% GEQ 1 Echo DC [ICMP] check failed! && Echo. && GoTo Uset0DC
@@ -331,6 +345,7 @@ Timeout/t 60
 GoTo uSetDU
 ::
 :Search
+IF %PREREQUISITE_STATUS% EQU 0 GoTo errDep
 Color 0A
 mode con:cols=55 lines=40
 cls
@@ -352,11 +367,11 @@ Echo.
 Echo Just type the name of the AD group
 Echo without any quotes (NO QUOTES!)
 Echo.
-SET /p adgroup.n=Group to search=
+SET /p adgroup.n=Group to search:
 SET adgroup="%adgroup.n%"
-::
+
 IF NOT EXIST %LogPath% mkdir %LogPath% || GoTo errRWMD
-::
+mode con:cols=100 lines=40
 Echo Groups returned:
 dsquery group domainroot -o rdn -name %adgroup% -s %DC% -limit %sLimit%
 Echo New search >> %LogPath%\%Log%
@@ -374,9 +389,8 @@ Echo Groups returned: >> %LogPath%\%Log%
 dsquery group domainroot -o rdn -name %adgroup% -s %DC% -limit %sLimit% >> %LogPath%\%Log%
 ECHO. >> %LogPath%\%Log%
 Echo Groups CN: >> %LogPath%\%Log%
-mode con:cols=100 lines=40
-FOR /F "delims=" %%P IN ('DSQUERY GROUP -name %adgroup%') DO (ECHO %%P) & (ECHO %%P | dsget group -samid) & ECHO %%P | dsget group -members -expand 2> nul | dsget user -upn -ln -fn -samid -display 2> nul
 FOR /F "delims=" %%P IN ('DSQUERY GROUP -name %adgroup%') DO (ECHO %%P >> %LogPath%\%Log%) & (ECHO %%P | dsget group -samid >> %LogPath%\%Log%) & (ECHO %%P | dsget group -members -expand 2> nul | dsget user -upn -ln -fn -samid -display 2> nul >> %LogPath%\%Log%) & echo. >> %LogPath%\%Log%
+FOR /F "delims=" %%P IN ('DSQUERY GROUP -name %adgroup%') DO (ECHO %%P) & (ECHO %%P | dsget group -samid) & ECHO %%P | dsget group -members -expand 2> nul | dsget user -upn -ln -fn -samid -display 2> nul
 echo.
 Echo.
 Echo.
@@ -388,12 +402,13 @@ Pause
 GoTo fCntr1
 :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 :aSearch
-Color 7
+IF %PREREQUISITE_STATUS% EQU 0 GoTo errDep
+Color 0A
 mode con:cols=55 lines=40
 cls
 Echo ******************************************************
 Echo Location: Advanced Search           
-Echo.
+Echo Not a domain computer and/or user
 Echo.
 Echo Query limit: %sLimit%
 Echo.
@@ -406,6 +421,9 @@ Echo Current search count: %COUNTER%
 Echo.
 Echo ******************************************************
 Echo.
+IF NOT DEFINED cUSERNAME GoTo uSetDU
+IF NOT DEFINED PASSWORD GoTo uSetDU
+IF NOT DEFINED Domain GoTo uSetDU
 :: Group to look for
 Echo INSTRUCTIONS:
 Echo -------------------
@@ -415,30 +433,30 @@ Echo.
 Echo Just type the name of the AD group
 Echo without any quotes (NO QUOTES!)
 Echo.
-SET /p adgroup.n=Group to search=
+SET /p adgroup.n=Group to search:
 SET adgroup="%adgroup.n%"
 
 IF NOT EXIST %LogPath% mkdir %LogPath% || GoTo errRWMD
+mode con:cols=100 lines=40
 Echo Groups returned:
-dsquery group domainroot -o rdn -name %adgroup% -s %DC% -limit %sLimit%
+dsquery group domainroot -o rdn -name %adgroup% -d %DOMAIN% -limit %sLimit% -u %cUSERNAME% -p %PASSWORD%
 Echo New search >> %LogPath%\%Log%
 Echo %Date% %Time% >> %LogPath%\%Log%
 Echo DC searched: %DC% >> %LogPath%\%Log%
 Echo AD Group searched: %adgroup% >> %LogPath%\%Log%
 SET "SEARCH_RESULT="
 IF EXIST "%TEMP%\var_ADGS_Result.txt" DEL /Q /F "%TEMP%\var_ADGS_Result.txt"
-dsquery group domainroot -o rdn -name %adgroup% -s %DC% -limit %sLimit% | FINDSTR /I /R /C:"%adgroup%" > %TEMP%\var_ADGS_Result.txt
+dsquery group domainroot -o rdn -name %adgroup% -limit %sLimit% -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% | FINDSTR /I /R /C:"%adgroup%" > %TEMP%\var_ADGS_Result.txt
 SET /P SEARCH_RESULT= < %TEMP%\var_ADGS_Result.txt
 IF NOT DEFINED SEARCH_RESULT (SET SEARCH_RESULT=0) ELSE (SET SEARCH_RESULT=1)
 ECHO Search Result: %SEARCH_RESULT% >> %LogPath%\%Log%
 IF %SEARCH_RESULT% EQU 0 (GoTo errSR) ELSE ECHO Processing...
 Echo Groups returned: >> %LogPath%\%Log%
-dsquery group domainroot -o rdn -name %adgroup% -s %DC% -limit %sLimit% >> %LogPath%\%Log%
+dsquery group domainroot -o rdn -name %adgroup% -limit %sLimit% -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% >> %LogPath%\%Log%
 ECHO. >> %LogPath%\%Log%
 Echo Groups CN: >> %LogPath%\%Log%
-mode con:cols=100 lines=40
-FOR /F "delims=" %%P IN ('DSQUERY GROUP -name %adgroup%') DO (ECHO %%P) & (ECHO %%P | dsget group -samid) & ECHO %%P | dsget group -members -expand 2> nul | dsget user -upn -ln -fn -samid -display 2> nul
-FOR /F "delims=" %%P IN ('DSQUERY GROUP -name %adgroup%') DO (ECHO %%P >> %LogPath%\%Log%) & (ECHO %%P | dsget group -samid >> %LogPath%\%Log%) & (ECHO %%P | dsget group -members -expand 2> nul | dsget user -upn -ln -fn -samid -display 2> nul >> %LogPath%\%Log%) & echo. >> %LogPath%\%Log%
+FOR /F "delims=" %%P IN ('DSQUERY GROUP -name %adgroup% -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD%') DO (ECHO %%P >> %LogPath%\%Log%) & (ECHO %%P | dsget group -samid -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% >> %LogPath%\%Log%) & (ECHO %%P | dsget group -members -expand -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% 2> nul | dsget user -upn -ln -fn -samid -display -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% 2> nul >> %LogPath%\%Log%) & echo. >> %LogPath%\%Log%
+FOR /F "delims=" %%P IN ('DSQUERY GROUP -name %adgroup% -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD%') DO (ECHO %%P) & (ECHO %%P | dsget group -samid -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD%) & ECHO %%P | dsget group -members -expand -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% 2> nul | dsget user -upn -ln -fn -samid -display -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% 2> nul
 echo.
 Echo.
 Echo.
@@ -561,23 +579,27 @@ GoTo Menu
 cls
 mode con:cols=55 lines=40
 Color C
+SET PREREQUISITE_STATUS=0
 Echo  !!ERROR!! !!ERROR!! !!ERROR!! !!ERROR!! !!ERROR!!
 Echo.
 Echo.
 Echo It appears this computer [%COMPUTERNAME%] doesn't have
-Echo the required binaries to run this tool.
-Echo Try running the tool on a computer that has 
-echo the required binaries:
+Echo the required binaries to run this tool:
 Echo.
 Echo DSQUERY
 Echo DSGET
-Echo.
 Echo.
 Echo Try installing "Remote Server Admin Tool --> AD DS and AD LDS Tools".
 Echo Instructions for doing this:
 Echo https://support.microsoft.com/en-us/help/2693643/remote-server-administration-tools-rsat-for-windows-operating-systems
 Echo.
+echo Install RSAT? ([Yes], [No])
+set /p INSTALL_DEPENDENCY=[Y]es or [N]o:
+IF NOT DEFINED INSTALL_DEPENDENCY GoTo skip skiperrDep
+IF "%INSTALL_DEPENDENCY%"=="y" SET INSTALL_DEPENDENCY=Y
+IF "%INSTALL_DEPENDENCY%"=="Y" GoTo subIDEP  
 Echo.
+:skiperrDep
 Timeout /t 120
 GoTo EOF
 :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -672,8 +694,44 @@ Echo Query limit: %sLimit%
 Echo.
 Echo ******************************************************
 GoTo sublim
-::
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+
+:: SUBROUTINES
+
+:: Sub-routine install DS dependency
+:subIDEP
+Cls
+mode con:cols=68 lines=40
+Color 2F
+ECHO Going to try to install RSAT (Remote Server Administration Tools)...
+echo.
+:: Check if running with Administrative Privilege
+echo Checking if running as an administrator...
+openfiles.exe 2>nul 1>nul
+SET ADMIN_STATUS=%ERRORLEVEL%
+IF %ADMIN_STATUS% EQU 0 GoTo skipASE
+echo.
+Color C
+ECHO Not running as an administrator!
+Echo Run %Name% as an administrator!
+SET PREREQUISITE_STATUS=0
+echo.
+IF %ADMIN_STATUS% GTR 0 PAUSE
+IF %ADMIN_STATUS% GTR 0 GoTo skipsubIDep
+:skipASE
+DISM /online /get-capabilities | FIND /I "RSAT.ActiveDirectory"
+FOR /F "tokens=3 delims=: " %%P IN ('DISM /online /get-capabilities ^| FIND /I "RSAT.ActiveDirectory"') DO DISM /Online /add-capability /CapabilityName:%%P
+SET DISM_STATUS=%ERRORLEVEL%
+echo DISM_STATUS:%DISM_STATUS%
+IF %DISM_STATUS% EQU 0 SET PREREQUISITE_STATUS=1
+echo.
+PAUSE
+echo.
+:skipsubIDep
+GoTo Menu
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
 :EOF
 IF %kpLog%==No (IF EXIST %LogPath%\%Log% Del /q %LogPath%\%Log%)
 IF EXIST %LogPath%\%Log% Echo End Session >> %LogPath%\%Log%
@@ -682,15 +740,16 @@ cls
 mode con:cols=55 lines=25
 COLOR 0B
 Echo.
-Echo.
 ECHO Developed by:
 ECHO David Geeraerts {dgeeraerts.evergreen@gmail.com}
 ECHO.
 ECHO.
+Echo.
 ECHO Contributors:
 ECHO.
 Echo.
 Echo.
+ECHO.
 ECHO.
 ECHO Copyleft License
 ECHO GNU GPL (General Public License)
