@@ -9,6 +9,22 @@
 - `Security` in case of vulnerabilities.
 - `Deprecated` for soon-to-be removed features.
 
+
+---
+
+### Version 2.1.0 (2019-11-27)
+#### Added
+- Group count
+
+#### Fixed
+- Regular expression search starting with AD Group search *
+- DSQUERY using limit
+
+#### Changed
+- search limit default to 500
+- Log output defaulted to user documents
+
+
 ---
 
 ### Version 2.0.0 (2019-11-06)
@@ -27,8 +43,6 @@
 #### Fixed
 - Advanced search not working with custom parameters
 
-
----
 
 ### Version 1.8.0 (2019-10-29)
 #### Added
