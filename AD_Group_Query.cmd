@@ -29,8 +29,8 @@
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 SET Name=AD Group Member Fetcher
-SET Version=2.0.0
-SET BUILD=2019-11-06-0724
+SET Version=2.1.0
+SET BUILD=2019-11-27-1453
 Title %Name% Version: %Version%
 Prompt DS$G
 color 8F
@@ -41,8 +41,8 @@ color 8F
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 :: Defaults
 ::	uses user profile location for logs
-SET LogPath=%APPDATA%\Logs
-SET Log=AD_Group_Query.txt
+SET LogPath=%USERPROFILE%\Documents\Logs
+SET Log=AD_Group_Query.log
 
 :: Advanced Settings
 :: 
@@ -68,7 +68,7 @@ SET cUSERNAME=%USERNAME%
 SET Counter=0
 SET kpLog=Yes
 SET nwLine=^& Echo
-SET sLimit=100
+SET sLimit=500
 SET du=1
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
@@ -380,17 +380,24 @@ Echo DC searched: %DC% >> %LogPath%\%Log%
 Echo AD Group searched: %adgroup% >> %LogPath%\%Log%
 SET "SEARCH_RESULT="
 IF EXIST "%TEMP%\var_ADGS_Result.txt" DEL /Q /F "%TEMP%\var_ADGS_Result.txt"
-dsquery group domainroot -o rdn -name %adgroup% -s %DC% -limit %sLimit% | FINDSTR /I /R /C:"%adgroup%" > %TEMP%\var_ADGS_Result.txt
+dsquery group domainroot -o rdn -name %adgroup% -s %DC% -limit %sLimit% | FINDSTR /I /R /C:".%adgroup%" > %TEMP%\var_ADGS_Result.txt
 SET /P SEARCH_RESULT= < %TEMP%\var_ADGS_Result.txt
 IF NOT DEFINED SEARCH_RESULT (SET SEARCH_RESULT=0) ELSE (SET SEARCH_RESULT=1)
 ECHO Search Result: %SEARCH_RESULT% >> %LogPath%\%Log%
+echo.
 IF %SEARCH_RESULT% EQU 0 (GoTo errSR) ELSE ECHO Processing...
+echo.
+FOR /F "tokens=3 delims= " %%M IN ('FIND /I /C """" "%TEMP%\var_ADGS_Result.txt"') DO ECHO %%M > "%TEMP%\var_ADGS_Count.txt"
+SET /P GROUP_COUNT= < "%TEMP%\var_ADGS_Count.txt"
+echo Number of groups: %GROUP_COUNT%
+echo.
+echo Number of groups: %GROUP_COUNT% >> %LogPath%\%Log%
 Echo Groups returned: >> %LogPath%\%Log%
 dsquery group domainroot -o rdn -name %adgroup% -s %DC% -limit %sLimit% >> %LogPath%\%Log%
 ECHO. >> %LogPath%\%Log%
 Echo Groups CN: >> %LogPath%\%Log%
-FOR /F "delims=" %%P IN ('DSQUERY GROUP -name %adgroup%') DO (ECHO %%P >> %LogPath%\%Log%) & (ECHO %%P | dsget group -samid >> %LogPath%\%Log%) & (ECHO %%P | dsget group -members -expand 2> nul | dsget user -upn -ln -fn -samid -display 2> nul >> %LogPath%\%Log%) & echo. >> %LogPath%\%Log%
-FOR /F "delims=" %%P IN ('DSQUERY GROUP -name %adgroup%') DO (ECHO %%P) & (ECHO %%P | dsget group -samid) & ECHO %%P | dsget group -members -expand 2> nul | dsget user -upn -ln -fn -samid -display 2> nul
+FOR /F "delims=" %%P IN ('DSQUERY GROUP -name %adgroup% -limit %sLimit%') DO (ECHO %%P >> %LogPath%\%Log%) & (ECHO %%P | dsget group -samid >> %LogPath%\%Log%) & (ECHO %%P | dsget group -members -expand 2> nul | dsget user -upn -ln -fn -samid -display 2> nul >> %LogPath%\%Log%) & echo. >> %LogPath%\%Log%
+FOR /F "delims=" %%P IN ('DSQUERY GROUP -name %adgroup% -limit %sLimit%') DO (ECHO %%P) & (ECHO %%P | dsget group -samid) & ECHO %%P | dsget group -members -expand 2> nul | dsget user -upn -ln -fn -samid -display 2> nul
 echo.
 Echo.
 Echo.
@@ -398,6 +405,7 @@ Echo For large record sets, it easier to read the logfile; %nwLine% it's suggest
 Echo. 
 Echo Log file directory path: %LogPath% 
 Echo.
+:: Don't remove this pause, it's part of console
 Pause
 GoTo fCntr1
 :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -446,17 +454,23 @@ Echo DC searched: %DC% >> %LogPath%\%Log%
 Echo AD Group searched: %adgroup% >> %LogPath%\%Log%
 SET "SEARCH_RESULT="
 IF EXIST "%TEMP%\var_ADGS_Result.txt" DEL /Q /F "%TEMP%\var_ADGS_Result.txt"
-dsquery group domainroot -o rdn -name %adgroup% -limit %sLimit% -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% | FINDSTR /I /R /C:"%adgroup%" > %TEMP%\var_ADGS_Result.txt
+dsquery group domainroot -o rdn -name %adgroup% -limit %sLimit% -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% | FINDSTR /I /R /C:".%adgroup%" > %TEMP%\var_ADGS_Result.txt
 SET /P SEARCH_RESULT= < %TEMP%\var_ADGS_Result.txt
 IF NOT DEFINED SEARCH_RESULT (SET SEARCH_RESULT=0) ELSE (SET SEARCH_RESULT=1)
 ECHO Search Result: %SEARCH_RESULT% >> %LogPath%\%Log%
+echo.
 IF %SEARCH_RESULT% EQU 0 (GoTo errSR) ELSE ECHO Processing...
+echo.
+FOR /F "tokens=3 delims= " %%M IN ('FIND /I /C """" "%TEMP%\var_ADGS_Result.txt"') DO ECHO %%M > "%TEMP%\var_ADGS_Count.txt"
+SET /P GROUP_COUNT= < "%TEMP%\var_ADGS_Count.txt"
+echo Number of groups: %GROUP_COUNT%
+echo Number of groups: %GROUP_COUNT% >> %LogPath%\%Log%
 Echo Groups returned: >> %LogPath%\%Log%
 dsquery group domainroot -o rdn -name %adgroup% -limit %sLimit% -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% >> %LogPath%\%Log%
 ECHO. >> %LogPath%\%Log%
 Echo Groups CN: >> %LogPath%\%Log%
-FOR /F "delims=" %%P IN ('DSQUERY GROUP -name %adgroup% -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD%') DO (ECHO %%P >> %LogPath%\%Log%) & (ECHO %%P | dsget group -samid -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% >> %LogPath%\%Log%) & (ECHO %%P | dsget group -members -expand -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% 2> nul | dsget user -upn -ln -fn -samid -display -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% 2> nul >> %LogPath%\%Log%) & echo. >> %LogPath%\%Log%
-FOR /F "delims=" %%P IN ('DSQUERY GROUP -name %adgroup% -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD%') DO (ECHO %%P) & (ECHO %%P | dsget group -samid -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD%) & ECHO %%P | dsget group -members -expand -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% 2> nul | dsget user -upn -ln -fn -samid -display -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% 2> nul
+FOR /F "delims=" %%P IN ('DSQUERY GROUP -name %adgroup% -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% -limit %sLimit%') DO (ECHO %%P >> %LogPath%\%Log%) & (ECHO %%P | dsget group -samid -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% >> %LogPath%\%Log%) & (ECHO %%P | dsget group -members -expand -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% 2> nul | dsget user -upn -ln -fn -samid -display -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% 2> nul >> %LogPath%\%Log%) & echo. >> %LogPath%\%Log%
+FOR /F "delims=" %%P IN ('DSQUERY GROUP -name %adgroup% -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% -limit %sLimit%') DO (ECHO %%P) & (ECHO %%P | dsget group -samid -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD%) & ECHO %%P | dsget group -members -expand -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% 2> nul | dsget user -upn -ln -fn -samid -display -d %DOMAIN% -u %cUSERNAME% -p %PASSWORD% 2> nul
 echo.
 Echo.
 Echo.
