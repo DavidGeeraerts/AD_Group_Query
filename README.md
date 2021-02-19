@@ -1,2 +1,3 @@
-# AD_Group_Query
-Active Directory Group Query tool
+# Deprecated!
+
+Replaced by [ADDS_Tool](https://github.com/DavidGeeraerts/ADDS_Tool)
